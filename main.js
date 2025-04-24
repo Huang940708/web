@@ -12,8 +12,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const ctx = canvas.getContext('2d');
     
     // 設定基本參數，使用隨機值
-    const verticalCenter = window.innerHeight * (0.3 + Math.random() * 0.4); // 隨機位置在畫面30%-70%之間
-    const baseAmplitude = (97.5 + Math.random() * 39); // 增加 30%（從 75-105 增加到 97.5-136.5）
+    let verticalCenter = window.innerHeight * (0.3 + Math.random() * 0.4); // 隨機位置在畫面30%-70%之間
+    let baseAmplitude = (97.5 + Math.random() * 39); // 增加 30%（從 75-105 增加到 97.5-136.5）
     
     // 波形參數 - 使用隨機值初始化
     const waveParams = {
@@ -40,6 +40,37 @@ document.addEventListener('DOMContentLoaded', function() {
             phase: Math.random() * Math.PI * 2
         }
     ];
+    
+    // 增加更多的子波，並進一步隨機化參數以豐富波形
+    const extraSubWaves = [
+        {
+            frequency: waveParams.frequency * (0.4 + Math.random() * 0.3),
+            amplitude: baseAmplitude * 0.12,
+            speed: waveParams.speed * 0.8,
+            phase: Math.random() * Math.PI * 2
+        },
+        {
+            frequency: waveParams.frequency * (1.5 + Math.random() * 0.5),
+            amplitude: baseAmplitude * 0.08,
+            speed: waveParams.speed * 1.7,
+            phase: Math.random() * Math.PI * 2
+        },
+        {
+            frequency: waveParams.frequency * (0.6 + Math.random() * 0.5),
+            amplitude: baseAmplitude * 0.18,
+            speed: waveParams.speed * 1.2,
+            phase: Math.random() * Math.PI * 2
+        },
+        {
+            frequency: waveParams.frequency * (1.8 + Math.random() * 0.4),
+            amplitude: baseAmplitude * 0.1,
+            speed: waveParams.speed * 2.0,
+            phase: Math.random() * Math.PI * 2
+        }
+    ];
+
+    // 將新增的子波加入到原有的子波陣列中
+    subWaves.push(...extraSubWaves);
     
     // 時間變數
     let time = Math.random() * 100; // 隨機的起始時間
@@ -148,4 +179,65 @@ document.addEventListener('DOMContentLoaded', function() {
     resizeCanvas();
     // 開始動畫循環
     requestAnimationFrame(drawWave);
+
+    // 新增 Web Serial API 支援
+    let port;
+    let reader;
+
+    async function connectToSerial() {
+        try {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 9600 });
+
+            const decoder = new TextDecoderStream();
+            const inputDone = port.readable.pipeTo(decoder.writable);
+            reader = decoder.readable.getReader();
+
+            readSerialData();
+        } catch (err) {
+            console.error('無法連接到序列埠:', err);
+        }
+    }
+
+    async function readSerialData() {
+        while (true) {
+            try {
+                const { value, done } = await reader.read();
+                if (done) {
+                    break;
+                }
+                if (value) {
+                    const potValue = parseInt(value.trim(), 10);
+                    if (!isNaN(potValue)) {
+                        updateWaveParams(potValue);
+                    }
+                }
+            } catch (err) {
+                console.error('讀取序列資料時發生錯誤:', err);
+                break;
+            }
+        }
+    }
+
+    function updateWaveParams(potValue) {
+        // 將可變電阻的值映射到波浪參數範圍
+        const mappedAmplitude = mapValue(potValue, 0, 1023, 50, 200);
+        const mappedFrequency = mapValue(potValue, 0, 1023, 0.001, 0.01);
+
+        baseAmplitude = mappedAmplitude;
+        waveParams.frequency = mappedFrequency;
+    }
+
+    function mapValue(value, inMin, inMax, outMin, outMax) {
+        return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+    }
+
+    // 新增按鈕以連接序列埠
+    const connectButton = document.createElement('button');
+    connectButton.textContent = '連接 Arduino';
+    connectButton.style.position = 'absolute';
+    connectButton.style.top = '10px';
+    connectButton.style.left = '10px';
+    connectButton.addEventListener('click', connectToSerial);
+    document.body.appendChild(connectButton);
 });
